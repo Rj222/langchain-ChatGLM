@@ -1,6 +1,7 @@
+import sys
 from langchain.embeddings.huggingface import HuggingFaceEmbeddings
 from langchain.vectorstores import FAISS
-from langchain.document_loaders import UnstructuredFileLoader, TextLoader
+from langchain.document_loaders import UnstructuredFileLoader, TextLoader, JSONLoader
 from configs.model_config import *
 import datetime
 from textsplitter import ChineseTextSplitter
@@ -8,6 +9,7 @@ from typing import List, Tuple, Dict
 from langchain.docstore.document import Document
 import numpy as np
 from utils import torch_gc
+import time
 from tqdm import tqdm
 from pypinyin import lazy_pinyin
 from loader import UnstructuredPaddleImageLoader, UnstructuredPaddlePDFLoader
@@ -18,8 +20,17 @@ from models.base import (BaseAnswer,
 from models.loader.args import parser
 from models.loader import LoaderCheckPoint
 import models.shared as shared
-from agent import bing_search
+# from agent import bing_search
 from langchain.docstore.document import Document
+from langchain.text_splitter import CharacterTextSplitter
+from utils import tools
+
+
+def metadata_func(record: dict, metadata: dict) -> dict:
+    metadata["title"] = record.get("full_title")
+    metadata["journal"] = record.get("journal")
+    metadata["publisher_id"] = record.get("publisher_id")
+    return metadata
 
 
 def load_file(filepath, sentence_size=SENTENCE_SIZE):
@@ -28,8 +39,19 @@ def load_file(filepath, sentence_size=SENTENCE_SIZE):
         docs = loader.load()
     elif filepath.lower().endswith(".txt"):
         loader = TextLoader(filepath, autodetect_encoding=True)
-        textsplitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
+        textsplitter = CharacterTextSplitter(separator="\n")
+        # textsplitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
         docs = loader.load_and_split(textsplitter)
+    elif filepath.lower().endswith(".json"):
+        # s_time = time.time()
+        loader = JSONLoader(filepath, jq_schema='.abstract', content_key="abstract", metadata_func=metadata_func)
+        #e_time = time.time()
+        #print("longchain_json: ", e_time - s_time)
+        textsplitter = CharacterTextSplitter(separator="\n")
+        # textsplitter = ChineseTextSplitter(pdf=False, sentence_size=sentence_size)
+        docs = loader.load_and_split(textsplitter)
+        # e_time = time.time()
+        # print("longchain_json: ", e_time - s_time)
     elif filepath.lower().endswith(".pdf"):
         loader = UnstructuredPaddlePDFLoader(filepath)
         textsplitter = ChineseTextSplitter(pdf=True, sentence_size=sentence_size)
@@ -161,12 +183,16 @@ class LocalDocQA:
     def init_cfg(self,
                  embedding_model: str = EMBEDDING_MODEL,
                  embedding_device=EMBEDDING_DEVICE,
+                 cache_folder: str = "",
                  llm_model: BaseAnswer = None,
                  top_k=VECTOR_SEARCH_TOP_K,
                  ):
         self.llm = llm_model
-        self.embeddings = HuggingFaceEmbeddings(model_name=embedding_model_dict[embedding_model],
+        self.embeddings = HuggingFaceEmbeddings(model_name=cache_folder + '/' + embedding_model_dict[embedding_model].replace('/' , '_'),
                                                 model_kwargs={'device': embedding_device})
+        # self.embeddings = HuggingFaceEmbeddings(model_name=cache_folder+ '/' + embedding_model_dict[embedding_model].replace('/','_'),
+        #                                         cache_folder=cache_folder,
+        #                                         model_kwargs={'device': embedding_device})
         self.top_k = top_k
 
     def init_knowledge_vector_store(self,
@@ -177,13 +203,14 @@ class LocalDocQA:
         failed_files = []
         if isinstance(filepath, str):
             if not os.path.exists(filepath):
-                print("路径不存在")
+                print("path doesn't exist")
                 return None
             elif os.path.isfile(filepath):
                 file = os.path.split(filepath)[-1]
                 try:
+
                     docs = load_file(filepath, sentence_size)
-                    logger.info(f"{file} 已成功加载")
+                    logger.info(f"{file} load successful")
                     loaded_files.append(filepath)
                 except Exception as e:
                     logger.error(e)
@@ -207,16 +234,23 @@ class LocalDocQA:
 
         else:
             docs = []
+
             for file in filepath:
+                start_time = time.time()
                 try:
                     docs += load_file(file)
-                    logger.info(f"{file} 已成功加载")
+                    logger.info(f"{file} load successful")
+                    print(f"{file} load successful")
                     loaded_files.append(file)
                 except Exception as e:
                     logger.error(e)
-                    logger.info(f"{file} 未能成功加载")
+                    logger.info(f"{file} doesn't load successful")
+                end_time = time.time()
+                print(end_time - start_time)
+
         if len(docs) > 0:
-            logger.info("文件加载完毕，正在生成向量库")
+            logger.info("file loading done，generating vector db")
+            print("file loading done，generating vector db")
             if vs_path and os.path.isdir(vs_path):
                 vector_store = FAISS.load_local(vs_path, self.embeddings)
                 vector_store.add_documents(docs)
@@ -229,6 +263,7 @@ class LocalDocQA:
                 torch_gc()
 
             vector_store.save_local(vs_path)
+            print("save done")
             return vs_path, loaded_files
         else:
             logger.info("文件均未成功加载，请检查依赖包或替换为其他文件再次上传。")
@@ -262,6 +297,8 @@ class LocalDocQA:
         vector_store.chunk_conent = self.chunk_conent
         vector_store.score_threshold = self.score_threshold
         related_docs_with_score = vector_store.similarity_search_with_score(query, k=self.top_k)
+
+        # print(related_docs_with_score)
         torch_gc()
         prompt = generate_prompt(related_docs_with_score, query)
 
@@ -300,50 +337,66 @@ class LocalDocQA:
                     "source_documents": related_docs_with_score}
         return response, prompt
 
-    def get_search_result_based_answer(self, query, chat_history=[], streaming: bool = STREAMING):
-        results = bing_search(query)
-        result_docs = search_result2docs(results)
-        prompt = generate_prompt(result_docs, query)
-
-        for answer_result in self.llm.generatorAnswer(prompt=prompt, history=chat_history,
-                                                      streaming=streaming):
-            resp = answer_result.llm_output["answer"]
-            history = answer_result.history
-            history[-1][0] = query
-            response = {"query": query,
-                        "result": resp,
-                        "source_documents": result_docs}
-            yield response, history
+    # def get_search_result_based_answer(self, query, chat_history=[], streaming: bool = STREAMING):
+    #     results = bing_search(query)
+    #     result_docs = search_result2docs(results)
+    #     prompt = generate_prompt(result_docs, query)
+    #
+    #     for answer_result in self.llm.generatorAnswer(prompt=prompt, history=chat_history,
+    #                                                   streaming=streaming):
+    #         resp = answer_result.llm_output["answer"]
+    #         history = answer_result.history
+    #         history[-1][0] = query
+    #         response = {"query": query,
+    #                     "result": resp,
+    #                     "source_documents": result_docs}
+    #         yield response, history
 
 
 if __name__ == "__main__":
     # 初始化消息
-    args = None
-    args = parser.parse_args(args=['--model-dir', '/media/checkpoint/', '--model', 'chatglm-6b', '--no-remote-model'])
+    # args = None
+    data_path = "/home/zrj/dev_proj/langchain-ChatGLM/data"
+    args = parser.parse_args(args=['--model-dir', '/home/zrj/dev_proj/langchain-ChatGLM', '--model', 'chatglm-6b-int4', '--no-remote-model'])
+    vs_path = "/home/zrj/dev_proj/langchain-ChatGLM/vector_store/path_paper_pubmed_10w"
+    json_file_lyst, json_file_lyst_name = tools.return_file_name(data_path + "/path_paper10w/result_10w", "json")
 
     args_dict = vars(args)
     shared.loaderCheckPoint = LoaderCheckPoint(args_dict)
     llm_model_ins = shared.loaderLLM()
     llm_model_ins.set_history_len(LLM_HISTORY_LEN)
-
     local_doc_qa = LocalDocQA()
-    local_doc_qa.init_cfg(llm_model=llm_model_ins)
-    query = "本项目使用的embedding模型是什么，消耗多少显存"
-    vs_path = "/media/gpt4-pdf-chatbot-langchain/dev-langchain-ChatGLM/vector_store/test"
+    local_doc_qa.init_cfg(llm_model=llm_model_ins, cache_folder="/home/zrj/dev_proj/langchain-ChatGLM/embmodel_store")
+    local_doc_qa.init_knowledge_vector_store(json_file_lyst, vs_path)
+
+    # local_doc_qa.init_knowledge_vector_store(
+    #     [f"{data_path}/path_paper10w/result_10w/PMC13902.xml.json", f"{data_path}/path_paper10w/result_10w/PMC13913.xml.json"], vs_path)
+
+    # local_doc_qa.init_knowledge_vector_store("{}/state_of_the_union.txt".format(data_path), vs_path)
+    # query = "本项目使用的embedding模型是什么，消耗多少显存"
+    query = "what is Breast Cancer"
+
     last_print_len = 0
-    # for resp, history in local_doc_qa.get_knowledge_based_answer(query=query,
-    #                                                              vs_path=vs_path,
-    #                                                              chat_history=[],
-    #                                                              streaming=True):
-    for resp, history in local_doc_qa.get_search_result_based_answer(query=query,
-                                                                     chat_history=[],
-                                                                     streaming=True):
-        print(resp["result"][last_print_len:], end="", flush=True)
+    # for resp, history in local_doc_qa.get_search_result_based_answer(query=query,
+    #                                                                  chat_history=[],
+    #                                                                  streaming=True):
+
+    for resp, history in local_doc_qa.get_knowledge_based_answer(query=query,
+                                                                 vs_path=vs_path,
+                                                                 chat_history=[],
+                                                                 streaming=True):
+
+        # print(resp["result"][last_print_len:], end="", flush=True)
         last_print_len = len(resp["result"])
-    source_text = [f"""出处 [{inum + 1}] {doc.metadata['source'] if doc.metadata['source'].startswith("http") 
-                   else os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-                   # f"""相关度：{doc.metadata['score']}\n\n"""
-                   for inum, doc in
-                   enumerate(resp["source_documents"])]
+
+    # source_text = [f"""出处 [{inum + 1}] {doc.metadata['source'] if doc.metadata['source'].startswith("http")
+    #                else os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
+    #                f"""相关度：{doc.metadata['score']}\n\n""" for inum, doc in enumerate(resp["source_documents"])]
+
+    source_text = [f"""出处 [{inum + 1}] title: {doc.metadata['title']} \n\n journey: {doc.metadata['journal']} publisher_id: {doc.metadata['publisher_id']}\n\n"""
+                   f"""相关度：{doc.metadata['score']}\n\n""" for inum, doc in enumerate(resp["source_documents"])]
+
+    # print(source_text)
+
     logger.info("\n\n" + "\n\n".join(source_text))
     pass

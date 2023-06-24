@@ -83,9 +83,12 @@ def get_folder_path(local_doc_id: str):
     return os.path.join(UPLOAD_ROOT_PATH, local_doc_id)
 
 
-def get_vs_path(local_doc_id: str):
-    return os.path.join(VS_ROOT_PATH, local_doc_id)
+# def get_vs_path(local_doc_id: str):
+#     return os.path.join(VS_ROOT_PATH, local_doc_id)
 
+def get_vs_path(local_doc_id: str):
+    vs_path = "/home/zrj/dev_proj/langchain-ChatGLM/vector_store/path_paper10w"
+    return vs_path
 
 def get_file_path(local_doc_id: str, doc_name: str):
     return os.path.join(UPLOAD_ROOT_PATH, local_doc_id, doc_name)
@@ -247,34 +250,34 @@ async def local_doc_chat(
         )
 
 
-async def bing_search_chat(
-        question: str = Body(..., description="Question", example="工伤保险是什么？"),
-        history: Optional[List[List[str]]] = Body(
-            [],
-            description="History of previous questions and answers",
-            example=[
-                [
-                    "工伤保险是什么？",
-                    "工伤保险是指用人单位按照国家规定，为本单位的职工和用人单位的其他人员，缴纳工伤保险费，由保险机构按照国家规定的标准，给予工伤保险待遇的社会保险制度。",
-                ]
-            ],
-        ),
-):
-    for resp, history in local_doc_qa.get_search_result_based_answer(
-            query=question, chat_history=history, streaming=True
-    ):
-        pass
-    source_documents = [
-        f"""出处 [{inum + 1}] [{doc.metadata["source"]}]({doc.metadata["source"]}) \n\n{doc.page_content}\n\n"""
-        for inum, doc in enumerate(resp["source_documents"])
-    ]
-
-    return ChatMessage(
-        question=question,
-        response=resp["result"],
-        history=history,
-        source_documents=source_documents,
-    )
+# async def bing_search_chat(
+#         question: str = Body(..., description="Question", example="工伤保险是什么？"),
+#         history: Optional[List[List[str]]] = Body(
+#             [],
+#             description="History of previous questions and answers",
+#             example=[
+#                 [
+#                     "工伤保险是什么？",
+#                     "工伤保险是指用人单位按照国家规定，为本单位的职工和用人单位的其他人员，缴纳工伤保险费，由保险机构按照国家规定的标准，给予工伤保险待遇的社会保险制度。",
+#                 ]
+#             ],
+#         ),
+# ):
+#     for resp, history in local_doc_qa.get_search_result_based_answer(
+#             query=question, chat_history=history, streaming=True
+#     ):
+#         pass
+#     source_documents = [
+#         f"""出处 [{inum + 1}] [{doc.metadata["source"]}]({doc.metadata["source"]}) \n\n{doc.page_content}\n\n"""
+#         for inum, doc in enumerate(resp["source_documents"])
+#     ]
+#
+#     return ChatMessage(
+#         question=question,
+#         response=resp["result"],
+#         history=history,
+#         source_documents=source_documents,
+#     )
 
 async def chat(
         question: str = Body(..., description="Question", example="工伤保险是什么？"),
@@ -326,9 +329,10 @@ async def stream_chat(websocket: WebSocket, knowledge_base_id: str):
             last_print_len = len(resp["result"])
 
         source_documents = [
-            f"""出处 [{inum + 1}] {os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-            f"""相关度：{doc.metadata['score']}\n\n"""
-            for inum, doc in enumerate(resp["source_documents"])
+                f"""出处 [{i + 1}] title: {(doc.metadata["title"])}, journal: {(doc.metadata["journal"])}\n"""
+                f"""{doc.page_content}\n"""
+                f"""相关度：{doc.metadata['score']}\n\n"""
+                for i, doc in enumerate(resp["source_documents"])
         ]
 
         await websocket.send_text(
@@ -380,7 +384,7 @@ def api_start(host, port):
     app.post("/local_doc_qa/upload_file", response_model=BaseResponse)(upload_file)
     app.post("/local_doc_qa/upload_files", response_model=BaseResponse)(upload_files)
     app.post("/local_doc_qa/local_doc_chat", response_model=ChatMessage)(local_doc_chat)
-    app.post("/local_doc_qa/bing_search_chat", response_model=ChatMessage)(bing_search_chat)
+    # app.post("/local_doc_qa/bing_search_chat", response_model=ChatMessage)(bing_search_chat)
     app.get("/local_doc_qa/list_files", response_model=ListDocsResponse)(list_docs)
     app.delete("/local_doc_qa/delete_file", response_model=BaseResponse)(delete_docs)
 
@@ -389,6 +393,7 @@ def api_start(host, port):
         llm_model=llm_model_ins,
         embedding_model=EMBEDDING_MODEL,
         embedding_device=EMBEDDING_DEVICE,
+        cache_folder="/home/zrj/dev_proj/langchain-ChatGLM/embmodel_store",
         top_k=VECTOR_SEARCH_TOP_K,
     )
     uvicorn.run(app, host=host, port=port)

@@ -174,3 +174,8 @@ embedding/*
 pyrightconfig.json
 loader/tmp_files
 flagged/*
+
+.github/
+.idea
+data/
+llm_models/

@@ -22,9 +22,12 @@ def main():
     local_doc_qa = LocalDocQA()
     local_doc_qa.init_cfg(llm_model=llm_model_ins,
                           embedding_model=EMBEDDING_MODEL,
+                          cache_folder="/home/zrj/dev_proj/langchain-ChatGLM/embmodel_store",
                           embedding_device=EMBEDDING_DEVICE,
                           top_k=VECTOR_SEARCH_TOP_K)
-    vs_path = None
+
+    # vs_path = None
+    vs_path = "/home/zrj/dev_proj/langchain-ChatGLM/vector_store/path_paper10w"
     while not vs_path:
         filepath = input("Input your local knowledge file path 请输入本地知识文件路径：")
         # 判断 filepath 是否为空，如果为空的话，重新让用户输入,防止用户误触回车
@@ -45,12 +48,15 @@ def main():
             else:
                 print(resp["result"])
         if REPLY_WITH_SOURCE:
-            source_text = [f"""出处 [{inum + 1}] {os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
-                           # f"""相关度：{doc.metadata['score']}\n\n"""
-                           for inum, doc in
-                           enumerate(resp["source_documents"])]
-            print("\n\n" + "\n\n".join(source_text))
-
+            # source_text = [f"""出处 [{inum + 1}] {os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
+            #                # f"""相关度：{doc.metadata['score']}\n\n"""
+            #                for inum, doc in
+            #                enumerate(resp["source_documents"])]
+            # print("\n\n" + "\n\n".join(source_text))
+            print("\n")
+            source_text = [f"""出处 [{inum + 1}] title: {doc.metadata['title']} \n journey: {doc.metadata['journal']} publisher_id: {doc.metadata['publisher_id']}\n"""
+                           f"""相关度：{doc.metadata['score']}\n""" for inum, doc in enumerate(resp["source_documents"])]
+            print(source_text)
 
 if __name__ == "__main__":
     main()

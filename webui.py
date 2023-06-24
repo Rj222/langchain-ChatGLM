@@ -58,7 +58,8 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
                 query=query, vs_path=vs_path, chat_history=history, streaming=streaming):
             source = "\n\n"
             source += "".join(
-                [f"""<details> <summary>出处 [{i + 1}] {os.path.split(doc.metadata["source"])[-1]}</summary>\n"""
+               # [f"""<details> <summary>出处 [{i + 1}] {os.path.split(doc.metadata["source"])[-1]}</summary>\n"""
+                [f"""<details> <summary>出处 [{i + 1}] title: {(doc.metadata["title"])}, journal: {(doc.metadata["journal"])}</summary>\n"""
                  f"""{doc.page_content}\n"""
                  f"""</details>"""
                  for i, doc in
@@ -78,12 +79,13 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
             else:
                 source = "\n".join(
                     [
-                        f"""<details open> <summary>【知识相关度 Score】：{doc.metadata["score"]} - 【出处{i + 1}】：  {os.path.split(doc.metadata["source"])[-1]} </summary>\n"""
-                        f"""{doc.page_content}\n"""
+                        f"""<details open> <summary>【知识相关度 Score】：{doc.metadata["score"]} - 【出处{i + 1}】：  title: {(doc.metadata["title"])}, journal: {(doc.metadata["journal"])}</summary>\n"""
+                        # f"""{doc.page_content}\n"""
                         f"""</details>"""
                         for i, doc in
                         enumerate(resp["source_documents"])])
-                history.append([query, "以下内容为知识库中满足设置条件的匹配结果：\n\n" + source])
+
+                history.append([query, "以下内容为知识库中满足设置条件的匹配结果，相关文献内容展示功能会在正式版推出：\n\n" + source])
                 yield history, ""
         else:
             yield history + [[query,
@@ -103,7 +105,13 @@ def get_answer(query, vs_path, history, mode, score_threshold=VECTOR_SEARCH_SCOR
 
 def init_model(llm_model: BaseAnswer = None):
     try:
-        local_doc_qa.init_cfg(llm_model=llm_model)
+        # local_doc_qa.init_cfg(llm_model=llm_model)
+        local_doc_qa.init_cfg(llm_model=llm_model_ins,
+                              embedding_model=EMBEDDING_MODEL,
+                              cache_folder="/home/zrj/dev_proj/langchain-ChatGLM/embmodel_store",
+                              embedding_device=EMBEDDING_DEVICE,
+                              top_k=VECTOR_SEARCH_TOP_K)
+
         generator = local_doc_qa.llm.generatorAnswer("你好")
         for answer_result in generator:
             print(answer_result.llm_output)
@@ -114,8 +122,9 @@ def init_model(llm_model: BaseAnswer = None):
         logger.error(e)
         reply = """模型未成功加载，请到页面左上角"模型配置"选项卡中重新选择后点击"加载模型"按钮"""
         if str(e) == "Unknown platform: darwin":
-            logger.info("该报错可能因为您使用的是 macOS 操作系统，需先下载模型至本地后执行 Web UI，具体方法请参考项目 README 中本地部署方法及常见问题："
-                        " https://github.com/imClumsyPanda/langchain-ChatGLM")
+            # logger.info("该报错可能因为您使用的是 macOS 操作系统，需先下载模型至本地后执行 Web UI，具体方法请参考项目 README 中本地部署方法及常见问题："
+            #             " https://github.com/imClumsyPanda/langchain-ChatGLM")
+            logger.info("platform: 该报错可能因为您使用的是 macOS 操作系统，需先下载模型至本地后执行 Web UI")
         else:
             logger.info(reply)
         return reply
@@ -138,7 +147,8 @@ def reinit_model(llm_model, embedding_model, llm_history_len, no_remote_model, u
 
 
 def get_vector_store(vs_id, files, sentence_size, history, one_conent, one_content_segmentation):
-    vs_path = os.path.join(VS_ROOT_PATH, vs_id)
+    # vs_path = os.path.join(VS_ROOT_PATH, vs_id)
+    vs_path = "/home/zrj/dev_proj/langchain-ChatGLM/vector_store/path_paper10w"
     filelist = []
     if not os.path.exists(os.path.join(UPLOAD_ROOT_PATH, vs_id)):
         os.makedirs(os.path.join(UPLOAD_ROOT_PATH, vs_id))
@@ -231,11 +241,10 @@ block_css = """.importantButton {
 }"""
 
 webui_title = """
-# 🎉langchain-ChatGLM WebUI🎉
-👍 [https://github.com/imClumsyPanda/langchain-ChatGLM](https://github.com/imClumsyPanda/langchain-ChatGLM)
+# 🎉path-article WebUI🎉
 """
 default_vs = vs_list[0] if len(vs_list) > 1 else "为空"
-init_message = f"""欢迎使用 langchain-ChatGLM Web UI！
+init_message = f"""欢迎使用 path-article Web UI！
 
 请在右侧切换模式，目前支持直接与 LLM 模型对话或基于本地知识库问答。
 
@@ -276,7 +285,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                 query = gr.Textbox(show_label=False,
                                    placeholder="请输入提问内容，按回车进行提交").style(container=False)
             with gr.Column(scale=5):
-                mode = gr.Radio(["LLM 对话", "知识库问答", "Bing搜索问答"],
+                mode = gr.Radio(["LLM 对话", "知识库问答"],
                                 label="请选择使用模式",
                                 value="知识库问答", )
                 knowledge_set = gr.Accordion("知识库设定", visible=False)
@@ -333,7 +342,7 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
                     query.submit(get_answer,
                                  [query, vs_path, chatbot, mode],
                                  [chatbot, query])
-    with gr.Tab("知识库测试 Beta"):
+    with gr.Tab("知识库文献搜索 Beta"):
         with gr.Row():
             with gr.Column(scale=10):
                 chatbot = gr.Chatbot([[None, knowledge_base_test_mode_info]],
@@ -465,5 +474,5 @@ with gr.Blocks(css=block_css, theme=gr.themes.Default(**default_theme_args)) as 
  .launch(server_name='0.0.0.0',
          server_port=7860,
          show_api=False,
-         share=False,
+         share=True,
          inbrowser=False))
