@@ -27,6 +27,9 @@ EMBEDDING_DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backe
 
 # supported LLM models
 # llm_model_dict 处理了loader的一些预设行为，如加载位置，模型名称，模型处理器实例
+# 在以下字典中修改属性值，以指定本地 LLM 模型存储位置
+# 如将 "chatglm-6b" 的 "local_model_path" 由 None 修改为 "User/Downloads/chatglm-6b"
+# 此处请写绝对路径
 llm_model_dict = {
     "chatglm-6b-int4": {
         "name": "chatglm-6b-int4",
@@ -70,6 +73,38 @@ llm_model_dict = {
     #     "local_model_path": None,
     #     "provides": "MOSSLLM"
     },
+    "chatglm-6b-int8": {
+        "name": "chatglm-6b-int8",
+        "pretrained_model_name": "THUDM/chatglm-6b-int8",
+        "local_model_path": None,
+        "provides": "ChatGLM"
+    },
+    "chatglm-6b": {
+        "name": "chatglm-6b",
+        "pretrained_model_name": "THUDM/chatglm-6b",
+        "local_model_path": None,
+        "provides": "ChatGLM"
+    },
+
+    "chatyuan": {
+        "name": "chatyuan",
+        "pretrained_model_name": "ClueAI/ChatYuan-large-v2",
+        "local_model_path": None,
+        "provides": None
+    },
+    "moss": {
+        "name": "moss",
+        "pretrained_model_name": "fnlp/moss-moon-003-sft",
+        "local_model_path": None,
+        "provides": "MOSSLLM"
+    },
+    "vicuna-13b-hf": {
+        "name": "vicuna-13b-hf",
+        "pretrained_model_name": "vicuna-13b-hf",
+        "local_model_path": None,
+        "provides": "LLamaLLM"
+    },
+
     # 通过 fastchat 调用的模型请参考如下格式
     "fastchat-chatglm-6b": {
         "name": "chatglm-6b",  # "name"修改为fastchat服务中的"model_name"
@@ -95,10 +130,11 @@ LLM_MODEL = "chatglm-6b-int4"
 LOAD_IN_8BIT = False
 # Load the model with bfloat16 precision. Requires NVIDIA Ampere GPU.
 BF16 = False
-# 本地lora存放的位置
-LORA_DIR = "loras/"
 # 本地模型存放的位置
 MODEL_DIR = "/home/zrj/dev_proj/langchain-ChatGLM"
+# 本地lora存放的位置
+LORA_DIR = "loras/"
+
 # LLM lora path，默认为空，如果有请直接指定文件夹路径
 LLM_LORA_PATH = ""
 USE_LORA = True if LLM_LORA_PATH else False
@@ -130,10 +166,10 @@ SENTENCE_SIZE = 100
 # 匹配后单段上下文长度
 CHUNK_SIZE = 250
 
-# 传入LLM的历史记录长度
+# LLM input history length
 LLM_HISTORY_LEN = 3
 
-# 知识库检索时返回的匹配内容条数
+# return top-k text chunk from vector store
 VECTOR_SEARCH_TOP_K = 5
 
 # 知识检索内容相关度 Score, 数值范围约为0-1100，如果为0，则不生效，经测试设置为小于500时，匹配结果更精准
