@@ -29,7 +29,9 @@ from utils import tools
 def metadata_func(record: dict, metadata: dict) -> dict:
     metadata["title"] = record.get("full_title")
     metadata["journal"] = record.get("journal")
-    metadata["publisher_id"] = record.get("publisher_id")
+    metadata["pmc"] = record.get("pmc")
+    metadata["publication_date"] = record.get("publication_date")
+    metadata["subjects"] = record.get("subjects")
     return metadata
 
 
@@ -188,7 +190,7 @@ class LocalDocQA:
                  top_k=VECTOR_SEARCH_TOP_K,
                  ):
         self.llm = llm_model
-        self.embeddings = HuggingFaceEmbeddings(model_name=cache_folder + '/' + embedding_model_dict[embedding_model].replace('/' , '_'),
+        self.embeddings = HuggingFaceEmbeddings(model_name=cache_folder + '/' + embedding_model_dict[embedding_model].replace('/', '_'),
                                                 model_kwargs={'device': embedding_device})
         # self.embeddings = HuggingFaceEmbeddings(model_name=cache_folder+ '/' + embedding_model_dict[embedding_model].replace('/','_'),
         #                                         cache_folder=cache_folder,
@@ -234,9 +236,10 @@ class LocalDocQA:
 
         else:
             docs = []
-
+            i = 0
             for file in filepath:
                 start_time = time.time()
+                i+=1
                 try:
                     docs += load_file(file)
                     logger.info(f"{file} load successful")
@@ -246,7 +249,7 @@ class LocalDocQA:
                     logger.error(e)
                     logger.info(f"{file} doesn't load successful")
                 end_time = time.time()
-                print(end_time - start_time)
+                print(end_time - start_time, "No. {}".format(i))
 
         if len(docs) > 0:
             logger.info("file loading done，generating vector db")
@@ -357,9 +360,9 @@ if __name__ == "__main__":
     # 初始化消息
     # args = None
     data_path = "/home/zrj/dev_proj/langchain-ChatGLM/data"
-    args = parser.parse_args(args=['--model-dir', '/home/zrj/dev_proj/langchain-ChatGLM', '--model', 'chatglm-6b-int4', '--no-remote-model'])
-    vs_path = "/home/zrj/dev_proj/langchain-ChatGLM/vector_store/path_paper_pubmed_10w"
-    json_file_lyst, json_file_lyst_name = tools.return_file_name(data_path + "/path_paper10w/result_10w", "json")
+    args = parser.parse_args(args=['--model-dir', '/home/zrj/dev_proj/langchain-ChatGLM/llm_models', '--model', 'chatglm-6b-int4', '--no-remote-model'])
+    vs_path = "/home/zrj/dev_proj/langchain-ChatGLM/vector_store/path_paper_pubmed_300w"
+    json_file_lyst, json_file_lyst_name = tools.return_file_name(data_path + "/result", "json")
 
     args_dict = vars(args)
     shared.loaderCheckPoint = LoaderCheckPoint(args_dict)
@@ -393,7 +396,7 @@ if __name__ == "__main__":
     #                else os.path.split(doc.metadata['source'])[-1]}：\n\n{doc.page_content}\n\n"""
     #                f"""相关度：{doc.metadata['score']}\n\n""" for inum, doc in enumerate(resp["source_documents"])]
 
-    source_text = [f"""出处 [{inum + 1}] title: {doc.metadata['title']} \n\n journey: {doc.metadata['journal']} publisher_id: {doc.metadata['publisher_id']}\n\n"""
+    source_text = [f"""出处 [{inum + 1}] title: {doc.metadata['title']} \n\n journey: {doc.metadata['journal']} pmc: {doc.metadata['pmc']}\n\n"""
                    f"""相关度：{doc.metadata['score']}\n\n""" for inum, doc in enumerate(resp["source_documents"])]
 
     # print(source_text)

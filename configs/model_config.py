@@ -69,26 +69,40 @@ llm_model_dict = {
     #     "pretrained_model_name": "fnlp/moss-moon-003-sft",
     #     "local_model_path": None,
     #     "provides": "MOSSLLM"
-    }
+    },
+    # 通过 fastchat 调用的模型请参考如下格式
+    "fastchat-chatglm-6b": {
+        "name": "chatglm-6b",  # "name"修改为fastchat服务中的"model_name"
+        "pretrained_model_name": "chatglm-6b",
+        "local_model_path": None,
+        "provides": "FastChatOpenAILLM",  # 使用fastchat api时，需保证"provides"为"FastChatOpenAILLM"
+        "api_base_url": "http://localhost:8000/v1"  # "name"修改为fastchat服务中的"api_base_url"
+    },
+
+    # 通过 fastchat 调用的模型请参考如下格式
+    "fastchat-vicuna-13b-hf": {
+        "name": "vicuna-13b-hf",  # "name"修改为fastchat服务中的"model_name"
+        "pretrained_model_name": "vicuna-13b-hf",
+        "local_model_path": None,
+        "provides": "FastChatOpenAILLM",  # 使用fastchat api时，需保证"provides"为"FastChatOpenAILLM"
+        "api_base_url": "http://localhost:8000/v1"  # "name"修改为fastchat服务中的"api_base_url"
+    },
 }
 
 # LLM 名称
 LLM_MODEL = "chatglm-6b-int4"
-# 如果你需要加载本地的model，指定这个参数  ` --no-remote-model`，或者下方参数修改为 `True`
-NO_REMOTE_MODEL = True
 # 量化加载8bit 模型
 LOAD_IN_8BIT = False
 # Load the model with bfloat16 precision. Requires NVIDIA Ampere GPU.
 BF16 = False
-# 本地模型存放的位置
-MODEL_DIR = "/home/zrj/dev_proj/langchain-ChatGLM"
 # 本地lora存放的位置
 LORA_DIR = "loras/"
-
+# 本地模型存放的位置
+MODEL_DIR = "/home/zrj/dev_proj/langchain-ChatGLM"
 # LLM lora path，默认为空，如果有请直接指定文件夹路径
 LLM_LORA_PATH = ""
 USE_LORA = True if LLM_LORA_PATH else False
-
+VS_ROOT_PATH = ""
 # LLM streaming reponse
 STREAMING = True
 
@@ -98,23 +112,17 @@ USE_PTUNING_V2 = False
 # LLM running device
 LLM_DEVICE = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
-
-VS_ROOT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "vector_store")
-
-UPLOAD_ROOT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "content")
+# 知识库默认存储路径
+KB_ROOT_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "knowledge_base")
 
 # 基于上下文的prompt模版，请务必保留"{question}"和"{context}"
-
 PROMPT_TEMPLATE = """已知信息：
-{context}
+{context} 
 
-根据上述已知信息，请专业的详细的来回答用户的问题。不需要重复相同的话。如果无法从中得到答案，请说 “根据已知信息无法回答该问题” 或 “没有提供足够的相关信息”，不允许在答案中添加编造成分，答案请使用中文。 问题是：{question}"""
+根据上述已知信息，简洁和专业的来回答用户的问题。如果无法从中得到答案，请说 “根据已知信息无法回答该问题” 或 “没有提供足够的相关信息”，不允许在答案中添加编造成分，答案请使用中文。 问题是：{question}"""
 
-
-# PROMPT_TEMPLATE = """已知信息：
-# {context}
-#
-# 根据上述已知信息，简洁和专业的来回答用户的问题。如果无法从中得到答案，请说 “根据已知信息无法回答该问题” 或 “没有提供足够的相关信息”，不允许在答案中添加编造成分，答案请使用中文。 问题是：{question}"""
+# 缓存知识库数量
+CACHED_VS_NUM = 1
 
 # 文本分句长度
 SENTENCE_SIZE = 100
@@ -122,14 +130,14 @@ SENTENCE_SIZE = 100
 # 匹配后单段上下文长度
 CHUNK_SIZE = 250
 
-# LLM input history length
+# 传入LLM的历史记录长度
 LLM_HISTORY_LEN = 3
 
-# return top-k text chunk from vector store
+# 知识库检索时返回的匹配内容条数
 VECTOR_SEARCH_TOP_K = 5
 
 # 知识检索内容相关度 Score, 数值范围约为0-1100，如果为0，则不生效，经测试设置为小于500时，匹配结果更精准
-VECTOR_SEARCH_SCORE_THRESHOLD = 650
+VECTOR_SEARCH_SCORE_THRESHOLD = 0
 
 NLTK_DATA_PATH = os.path.join(os.path.dirname(os.path.dirname(__file__)), "nltk_data")
 
@@ -145,10 +153,22 @@ flagging username: {FLAG_USER_NAME}
 
 # 是否开启跨域，默认为False，如果需要开启，请设置为True
 # is open cross domain
-OPEN_CROSS_DOMAIN = True
+OPEN_CROSS_DOMAIN = False
 
 # Bing 搜索必备变量
-# 使用 Bing 搜索需要使用 Bing Subscription Key
-# 具体申请方式请见 https://learn.microsoft.com/en-us/bing/search-apis/bing-web-search/quickstarts/rest/python
-# BING_SEARCH_URL = "https://api.bing.microsoft.com/v7.0/search"
-# BING_SUBSCRIPTION_KEY = ""
+# 使用 Bing 搜索需要使用 Bing Subscription Key,需要在azure port中申请试用bing search
+# 具体申请方式请见
+# https://learn.microsoft.com/en-us/bing/search-apis/bing-web-search/create-bing-search-service-resource
+# 使用python创建bing api 搜索实例详见:
+# https://learn.microsoft.com/en-us/bing/search-apis/bing-web-search/quickstarts/rest/python
+BING_SEARCH_URL = "https://api.bing.microsoft.com/v7.0/search"
+# 注意不是bing Webmaster Tools的api key，
+
+# 此外，如果是在服务器上，报Failed to establish a new connection: [Errno 110] Connection timed out
+# 是因为服务器加了防火墙，需要联系管理员加白名单，如果公司的服务器的话，就别想了GG
+BING_SUBSCRIPTION_KEY = ""
+
+# 是否开启中文标题加强，以及标题增强的相关配置
+# 通过增加标题判断，判断哪些文本为标题，并在metadata中进行标记；
+# 然后将文本与往上一级的标题进行拼合，实现文本信息的增强。
+ZH_TITLE_ENHANCE = False
